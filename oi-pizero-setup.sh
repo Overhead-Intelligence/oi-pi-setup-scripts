@@ -90,6 +90,17 @@ else
     echo "UART and Bluetooth configurations already present in $CONFIG_FILE"
 fi
 
+# With Bluetooth off, the UART on GPIO 14/15 becomes the primary UART, which
+# can carry the Linux serial console and a login prompt. Turn the console off
+# and keep the UART on, so the port is left to mavlink-router.
+if command -v raspi-config > /dev/null; then
+    echo "Turning off the serial console on the UART..."
+    sudo raspi-config nonint do_serial_cons 1
+    sudo raspi-config nonint do_serial_hw 0
+else
+    echo "raspi-config not found. Turn off the serial console on the UART by hand."
+fi
+
 #mavlink router config file
 if [ -d "/etc/mavlink-router" ]; then
     echo "Mavlink-router config already exists. Skipping..."
