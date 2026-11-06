@@ -443,10 +443,27 @@ RemainAfterExit=true
 WantedBy=multi-user.target
 EOF
 
+    # The modem's AT port. Set LTE_AT_PORT to use another one, for example
+    # the /dev/serial/by-id/ name ending in -if02.
+    local at_port="${LTE_AT_PORT:-/dev/ttyUSB2}"
+    if [ ! -c "$at_port" ]; then
+        log_info "No modem AT port at $at_port. Skipping the modem settings."
+        return 0
+    fi
+
     log_info "Sending AT command to configure modem for RNDIS mode..."
-    echo -e "AT+QCFG=\"usbnet\",1\r" | sudo tee /dev/ttyUSB2 > /dev/null || true
+    echo -e "AT+QCFG=\"usbnet\",1\r" | sudo tee "$at_port" > /dev/null || true
     sleep 1
-    echo -e "AT\r" | sudo tee /dev/ttyUSB2 > /dev/null || true
+
+    # The new USB mode only takes effect when the modem restarts. Skip the
+    # restart if usb0 is already there: the modem is in this mode already,
+    # and a restart would drop an SSH session running over LTE.
+    if ip link show usb0 > /dev/null 2>&1; then
+        log_info "usb0 is already up, so the modem is in network mode. Not restarting it."
+    else
+        log_info "Restarting the modem. usb0 appears in about 30 seconds."
+        echo -e "AT+CFUN=1,1\r" | sudo tee "$at_port" > /dev/null || true
+    fi
 }
 
 ## ZeroTier Installation
