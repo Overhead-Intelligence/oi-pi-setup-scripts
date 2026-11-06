@@ -80,13 +80,14 @@ configure_system() {
     disable_wifi_choice=${disable_wifi_choice,,}
 
     if [[ "$disable_wifi_choice" == "y" ]]; then
-        log_info "Disabling onboard WiFi..."
+        log_info "Onboard WiFi will turn off at the next reboot..."
         if ! grep -q "^dtoverlay=disable-wifi$" "$cfg_file"; then
             echo "dtoverlay=disable-wifi" | sudo tee -a "$cfg_file" > /dev/null
         else
             echo "WiFi already disabled. Skipping overlay."
         fi
-        sudo rfkill block wifi || true
+        # Don't rfkill WiFi now: over a WiFi SSH session that cuts the
+        # connection and kills this script. The overlay takes effect at reboot.
     else
         log_info "Leaving WiFi enabled..."
         if grep -q "^dtoverlay=disable-wifi$" "$cfg_file"; then
@@ -346,7 +347,50 @@ setup_rtsp_streamer() {
     
     cat << 'EOF' > "${app_dir}/stream.py"
 #!/usr/bin/env python3
-# ... (Your full RTSP python script here) ...
+
+import gi
+gi.require_version('Gst', '1.0')
+gi.require_version('GstRtspServer', '1.0')
+from gi.repository import Gst, GstRtspServer, GLib
+
+Gst.init(None)
+
+class RTSPServer:
+    def __init__(self):
+        self.server = GstRtspServer.RTSPServer()
+        self.server.set_service("30000")
+
+        factory = GstRtspServer.RTSPMediaFactory()
+        factory.set_shared(True)
+
+        resolution = (1280, 720)
+        framerate = 30
+        device = "/dev/video0"
+
+        if Gst.ElementFactory.find("v4l2h264enc"):
+            print("[INFO] Using hardware encoder (v4l2h264enc)")
+            encoder = 'v4l2h264enc extra-controls="controls,video_bitrate=1000000"'
+        else:
+            print("[INFO] Using software encoder (x264enc)")
+            encoder = "x264enc tune=zerolatency bitrate=1500 speed-preset=fast"
+
+        pipeline = (
+            f"( v4l2src device={device} ! image/jpeg,width={resolution[0]},height={resolution[1]},framerate={framerate}/1 ! "
+            f"jpegdec ! videoconvert ! videorate ! video/x-raw,framerate=10/1 ! {encoder} ! h264parse ! rtph264pay config-interval=1 name=pay0 pt=96 )"
+        )
+
+        factory.set_launch(pipeline)
+        self.server.get_mount_points().add_factory("/test", factory)
+        self.server.attach(None)
+
+    def run(self):
+        print("Stream ready at rtsp://<raspberry_pi_ip>:30000/test")
+        loop = GLib.MainLoop()
+        loop.run()
+
+if __name__ == '__main__':
+    server = RTSPServer()
+    server.run()
 EOF
     chmod +x "${app_dir}/stream.py"
     
@@ -399,10 +443,27 @@ RemainAfterExit=true
 WantedBy=multi-user.target
 EOF
 
+    # The modem's AT port. Set LTE_AT_PORT to use another one, for example
+    # the /dev/serial/by-id/ name ending in -if02.
+    local at_port="${LTE_AT_PORT:-/dev/ttyUSB2}"
+    if [ ! -c "$at_port" ]; then
+        log_info "No modem AT port at $at_port. Skipping the modem settings."
+        return 0
+    fi
+
     log_info "Sending AT command to configure modem for RNDIS mode..."
-    echo -e "AT+QCFG=\"usbnet\",1\r" | sudo tee /dev/ttyUSB2 > /dev/null || true
+    echo -e "AT+QCFG=\"usbnet\",1\r" | sudo tee "$at_port" > /dev/null || true
     sleep 1
-    echo -e "AT\r" | sudo tee /dev/ttyUSB2 > /dev/null || true
+
+    # The new USB mode only takes effect when the modem restarts. Skip the
+    # restart if usb0 is already there: the modem is in this mode already,
+    # and a restart would drop an SSH session running over LTE.
+    if ip link show usb0 > /dev/null 2>&1; then
+        log_info "usb0 is already up, so the modem is in network mode. Not restarting it."
+    else
+        log_info "Restarting the modem. usb0 appears in about 30 seconds."
+        echo -e "AT+CFUN=1,1\r" | sudo tee "$at_port" > /dev/null || true
+    fi
 }
 
 ## ZeroTier Installation

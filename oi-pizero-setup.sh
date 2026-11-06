@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# home directory
-USER_DIR="/home/droneman"
+# the user running the script, and their home directory
+USER_NAME="${SUDO_USER:-$(whoami)}"
+USER_DIR=$(getent passwd "$USER_NAME" | cut -d: -f6)
 
 # exit script if an error occurs
 set -e
@@ -47,11 +48,12 @@ for program in "${PROGRAMS[@]}"; do
         
         # python setup
         echo "Checking for Python external management removal..."
-        if [ -f /usr/lib/python3.13/EXTERNALLY-MANAGED.old ]; then
+        PY_LIB=$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["stdlib"])')
+        if [ ! -f "$PY_LIB/EXTERNALLY-MANAGED" ]; then
             echo "Python external management already disabled. Skipping..."
         else
             echo "Removing requirement for Python virtual environment..."
-            sudo mv /usr/lib/python3.13/EXTERNALLY-MANAGED /usr/lib/python3.13/EXTERNALLY-MANAGED.old
+            sudo mv "$PY_LIB/EXTERNALLY-MANAGED" "$PY_LIB/EXTERNALLY-MANAGED.old"
         fi
 
         pip3 install --upgrade pip
@@ -87,6 +89,17 @@ if ! grep -q "dtoverlay=uart0" "$CONFIG_FILE"; then
     echo "dtoverlay=disable-bt" | sudo tee -a $CONFIG_FILE
 else
     echo "UART and Bluetooth configurations already present in $CONFIG_FILE"
+fi
+
+# With Bluetooth off, the UART on GPIO 14/15 becomes the primary UART, which
+# can carry the Linux serial console and a login prompt. Turn the console off
+# and keep the UART on, so the port is left to mavlink-router.
+if command -v raspi-config > /dev/null; then
+    echo "Turning off the serial console on the UART..."
+    sudo raspi-config nonint do_serial_cons 1
+    sudo raspi-config nonint do_serial_hw 0
+else
+    echo "raspi-config not found. Turn off the serial console on the UART by hand."
 fi
 
 #mavlink router config file
@@ -221,14 +234,14 @@ RetryTimeout = 5
 EOF"
 fi
 
-echo "Adding droneman user to tty group"
-sudo usermod -aG tty droneman
+echo "Adding $USER_NAME to the tty group"
+sudo usermod -aG tty "$USER_NAME"
 
 curl -fsSL https://tailscale.com/install.sh | sudo bash
-log_success "Tailscale installed! Run 'sudo tailscale up' to authenticate."
+echo "Tailscale installed! Run 'sudo tailscale up' to authenticate."
 
 
-log_info "Installing ZeroTier..."
+echo "Installing ZeroTier..."
 curl -s https://install.zerotier.com | sudo bash
 
 # Reboot to apply changes
