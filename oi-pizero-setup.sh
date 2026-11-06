@@ -225,10 +225,10 @@ echo "Adding droneman user to tty group"
 sudo usermod -aG tty droneman
 
 curl -fsSL https://tailscale.com/install.sh | sudo bash
-log_success "Tailscale installed! Run 'sudo tailscale up' to authenticate."
+echo "Tailscale installed! Run 'sudo tailscale up' to authenticate."
 
 
-log_info "Installing ZeroTier..."
+echo "Installing ZeroTier..."
 curl -s https://install.zerotier.com | sudo bash
 
 # Reboot to apply changes
