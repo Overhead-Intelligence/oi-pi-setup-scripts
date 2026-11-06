@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# home directory
-USER_DIR="/home/droneman"
+# the user running the script, and their home directory
+USER_NAME="${SUDO_USER:-$(whoami)}"
+USER_DIR=$(getent passwd "$USER_NAME" | cut -d: -f6)
 
 # exit script if an error occurs
 set -e
@@ -221,8 +222,8 @@ RetryTimeout = 5
 EOF"
 fi
 
-echo "Adding droneman user to tty group"
-sudo usermod -aG tty droneman
+echo "Adding $USER_NAME to the tty group"
+sudo usermod -aG tty "$USER_NAME"
 
 curl -fsSL https://tailscale.com/install.sh | sudo bash
 echo "Tailscale installed! Run 'sudo tailscale up' to authenticate."
