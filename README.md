@@ -1,9 +1,9 @@
 # Pi5/PiZero Setup Scripts
-This repository has all of the necessary libraries and code needed to perform a geo-tagged wide band RF scan on board of an ArduPilot equipped UAS 
+Scripts that set up a Raspberry Pi 5 or Pi Zero 2 W as a companion computer for an ArduPilot flight controller. Both install mavlink-router, ZeroTier, Tailscale and iPhone USB tethering. The Pi 5 script also sets up a Quectel LTE modem and an RTSP stream from a USB camera.
 
 *Prerequisites:*
 
-* [ ] Raspberry Pi5/Zero w/Rasbperry Pi OS (Desktop or Headless)
+* [ ] Raspberry Pi5/Zero w/Raspberry Pi OS (Desktop or Headless)
 * [ ] Active internet connection
 * [ ] ArduPilot enabled flight controller
       
