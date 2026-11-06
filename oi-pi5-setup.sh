@@ -346,7 +346,50 @@ setup_rtsp_streamer() {
     
     cat << 'EOF' > "${app_dir}/stream.py"
 #!/usr/bin/env python3
-# ... (Your full RTSP python script here) ...
+
+import gi
+gi.require_version('Gst', '1.0')
+gi.require_version('GstRtspServer', '1.0')
+from gi.repository import Gst, GstRtspServer, GLib
+
+Gst.init(None)
+
+class RTSPServer:
+    def __init__(self):
+        self.server = GstRtspServer.RTSPServer()
+        self.server.set_service("30000")
+
+        factory = GstRtspServer.RTSPMediaFactory()
+        factory.set_shared(True)
+
+        resolution = (1280, 720)
+        framerate = 30
+        device = "/dev/video0"
+
+        if Gst.ElementFactory.find("v4l2h264enc"):
+            print("[INFO] Using hardware encoder (v4l2h264enc)")
+            encoder = 'v4l2h264enc extra-controls="controls,video_bitrate=1000000"'
+        else:
+            print("[INFO] Using software encoder (x264enc)")
+            encoder = "x264enc tune=zerolatency bitrate=1500 speed-preset=fast"
+
+        pipeline = (
+            f"( v4l2src device={device} ! image/jpeg,width={resolution[0]},height={resolution[1]},framerate={framerate}/1 ! "
+            f"jpegdec ! videoconvert ! videorate ! video/x-raw,framerate=10/1 ! {encoder} ! h264parse ! rtph264pay config-interval=1 name=pay0 pt=96 )"
+        )
+
+        factory.set_launch(pipeline)
+        self.server.get_mount_points().add_factory("/test", factory)
+        self.server.attach(None)
+
+    def run(self):
+        print("Stream ready at rtsp://<raspberry_pi_ip>:30000/test")
+        loop = GLib.MainLoop()
+        loop.run()
+
+if __name__ == '__main__':
+    server = RTSPServer()
+    server.run()
 EOF
     chmod +x "${app_dir}/stream.py"
     
