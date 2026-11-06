@@ -48,11 +48,12 @@ for program in "${PROGRAMS[@]}"; do
         
         # python setup
         echo "Checking for Python external management removal..."
-        if [ -f /usr/lib/python3.13/EXTERNALLY-MANAGED.old ]; then
+        PY_LIB=$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["stdlib"])')
+        if [ ! -f "$PY_LIB/EXTERNALLY-MANAGED" ]; then
             echo "Python external management already disabled. Skipping..."
         else
             echo "Removing requirement for Python virtual environment..."
-            sudo mv /usr/lib/python3.13/EXTERNALLY-MANAGED /usr/lib/python3.13/EXTERNALLY-MANAGED.old
+            sudo mv "$PY_LIB/EXTERNALLY-MANAGED" "$PY_LIB/EXTERNALLY-MANAGED.old"
         fi
 
         pip3 install --upgrade pip
