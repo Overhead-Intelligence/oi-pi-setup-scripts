@@ -80,13 +80,14 @@ configure_system() {
     disable_wifi_choice=${disable_wifi_choice,,}
 
     if [[ "$disable_wifi_choice" == "y" ]]; then
-        log_info "Disabling onboard WiFi..."
+        log_info "Onboard WiFi will turn off at the next reboot..."
         if ! grep -q "^dtoverlay=disable-wifi$" "$cfg_file"; then
             echo "dtoverlay=disable-wifi" | sudo tee -a "$cfg_file" > /dev/null
         else
             echo "WiFi already disabled. Skipping overlay."
         fi
-        sudo rfkill block wifi || true
+        # Don't rfkill WiFi now: over a WiFi SSH session that cuts the
+        # connection and kills this script. The overlay takes effect at reboot.
     else
         log_info "Leaving WiFi enabled..."
         if grep -q "^dtoverlay=disable-wifi$" "$cfg_file"; then
